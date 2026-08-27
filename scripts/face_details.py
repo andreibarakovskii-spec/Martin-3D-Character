@@ -78,7 +78,7 @@ def cloth_normal(materials, out):
 
 
 def smile_morph(obj):
-    obj.shape_key_add(name='Basis')
+    if not obj.data.shape_keys:obj.shape_key_add(name='Basis')
     key=obj.shape_key_add(name='Smile')
     # Local-to-world selection avoids touching paws and tail in the coat atlas mesh.
     inverse=obj.matrix_world.inverted()

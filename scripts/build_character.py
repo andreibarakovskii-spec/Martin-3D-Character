@@ -39,7 +39,11 @@ iris = material('Iris_olive_gold', (.4, .37, .1), .25)
 nosemat = material('Nose_rose_brown', (.24, .10, .075), .5)
 inner = material('Inner_ear', (.22, .145, .12), .9)
 whisker = material('Whiskers', (.55, .53, .47), .65)
-lidmat = material('Eyelid_coat', (.076, .070, .061), .92)
+lidmat = fur
+eye_surface = material('Eye_surface', (1,1,1), .20)
+eye_color = eye_surface.node_tree.nodes.new('ShaderNodeVertexColor')
+eye_color.layer_name='EyeColor'
+eye_surface.node_tree.links.new(eye_color.outputs['Color'],eye_surface.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
 cloth_normal([black, shoe], OUT)
 
 
@@ -151,8 +155,14 @@ for s in [-1,1]:
     mesh.from_pydata([(s*.245,-.056,2.025),(s*.369,-.034,2.025),(s*.345,-.032,2.215)],[],[(0,1,2)] if s>0 else [(2,1,0)])
     patch=bpy.data.objects.new('Ear_inner',mesh);bpy.context.collection.objects.link(patch)
     finish(patch,inner,'head')
-    sphere('Eye_globe',(s*.177,-.265,1.805),(.108,.095,.113),iris,'head',32,20)
-    sphere('Pupil',(s*.177,-.355,1.805),(.055,.011,.062),eye,'head',32,20)
+    globe=sphere('Eye_globe',(s*.177,-.265,1.805),(.108,.095,.113),eye_surface,'head',48,32)
+    color=globe.data.color_attributes.new(name='EyeColor',type='FLOAT_COLOR',domain='POINT')
+    for vertex,entry in zip(globe.data.vertices,color.data):
+        x,y,z=vertex.co
+        radial=math.hypot(x/.108,z/.113)
+        pupil=max(0,min(1,(radial-.48)/.09)) if y<0 else 1
+        streak=.86+.14*math.cos(math.atan2(z,x)*37)
+        entry.color=(.006*(1-pupil)+.40*streak*pupil,.008*(1-pupil)+.34*streak*pupil,.006*(1-pupil)+.095*streak*pupil,1)
     # Highlights come from actual scene lights, not white painted spots.
     for j in range(4):
         tube('Whisker',[(s*.13,-.391,1.60+j*.018),(s*.32,-.41,1.60+j*.035),(s*(.52+j*.022),-.37,1.57+j*.053)],.0023,whisker,'head')
@@ -215,17 +225,17 @@ bpy.context.view_layer.update()
 bpy.context.view_layer.objects.active=head
 mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.35
 bpy.ops.object.modifier_apply(modifier=mod.name)
-lids=eyelids(finish,lidmat)
+lids=eyelids(finish,lidmat);coat(lids)
 groups={}
 for obj,bname in parts:
     vg=obj.vertex_groups.new(name=bname)
     vg.add(list(range(len(obj.data.vertices))),1,'REPLACE')
-    if obj != lids:groups.setdefault(obj.data.materials[0].name,[]).append(obj)
-parts=[(lids,None)]
+    groups.setdefault(obj.data.materials[0].name,[]).append(obj)
+parts=[]
 for name,objects in groups.items():
     bpy.ops.object.select_all(action='DESELECT')
     for obj in objects:obj.select_set(True)
-    bpy.context.view_layer.objects.active=objects[0]
+    bpy.context.view_layer.objects.active=lids if lids in objects else objects[0]
     bpy.ops.object.join()
     obj=bpy.context.object;obj.name='Mobile_'+name
     parts.append((obj,None))
