@@ -34,6 +34,7 @@ def deform(p):
  body_width=1.25+.65*math.exp(-((z-.60)/.14)**2)
  xx=x*(body_width*(1-blend)+1.8*blend)
  if .81<z<.88:xx*=1+.10*math.exp(-((z-.85)/.035)**2)*math.exp(-(x/.065)**2)
+ if y<-.08:xx*=1-.25*math.exp(-(x/.065)**4-((z-.885)/.027)**4)
  yy=y*(1.3-.05*blend)
  if y<0 and abs(x)<.11:yy-=.02*math.exp(-((z-.57)/.12)**2)
  zz=z*.65 if z<=.75 else .4875+(z-.75)*1.45
@@ -55,7 +56,7 @@ for name in source_names:
  for vert in mesh.vertices:
   point=source.matrix_world@vert.co
   vert.co=cat_ear(point) if vert.index in ear_ids else deform(point)
-  if vert.index in nose_ids:vert.co.x*=.55
+
  for face in mesh.polygons:face.use_smooth=True
  obj['source_object']=name;obj['adaptation_stage']='visual geometry; rig transfer pending'
  render_objects.append(obj)
