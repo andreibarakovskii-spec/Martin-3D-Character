@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  PYTHONPATH: /usr/lib/python3/dist-packages
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -12,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Blender from Ubuntu packages
-        run: sudo apt-get update && sudo apt-get install -y blender
+        run: sudo apt-get update && sudo apt-get install -y blender python3-numpy
       - name: Build actual mesh, rig, animations and render
         run: blender --background --factory-startup --python-exit-code 1 --python scripts/build_character.py
       - name: Check GLB contents

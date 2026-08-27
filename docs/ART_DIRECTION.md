@@ -2,14 +2,14 @@
 
 Status: first procedural 3D prototype, NOT a finished 1:1 reconstruction.
 
-Keep the first reference's large rounded seyed head, short upright body,
+Keep the first reference's large rounded head, short upright body,
 black MARTIN hoodie, black/white sneakers, gold/black headphones,
 microphone and friendly expression. The real cat only guides coloration:
 gray/taupe tabby coat, dark forehead/cheek stripes, lighter muzzle,
 brown-pink nose, yellow/olive irises.
 
 Private source photographs are not committed to this public repository.
-The AI-generated-generated reference artwork is NOT proof of a working 3D model.
+The AI-generated reference artwork is NOT proof of a working 3D model.
 
 ## Required before calling this finished
 
