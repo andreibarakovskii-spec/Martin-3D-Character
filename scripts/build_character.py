@@ -255,7 +255,7 @@ area('Fill',(3,-2,3),240,(.65,.78,1),2.5)
 area('Rim',(1,3,4),550,(1,.70,.36),2)
 bpy.ops.object.camera_add(location=(3,-7,2.9))
 cam=bpy.context.object;cam.rotation_euler=(Vector((0,0,1.1))-cam.location).to_track_quat('-Z','Y').to_euler();cam.data.type='ORTHO';cam.data.ortho_scale=2.85;scene.camera=cam
-scene.render.engine='CYCLES';scene.cycles.samples=32;scene.cycles.use_denoising=True
+scene.render.engine='CYCLES';scene.cycles.samples=96;scene.cycles.use_denoising=False
 scene.render.resolution_x=800;scene.render.resolution_y=1000;scene.render.resolution_percentage=100
 scene.world.color=(.18,.18,.18)
 scene.render.image_settings.file_format='PNG';scene.render.filepath=str(OUT/'source-render.png')
