@@ -20,11 +20,15 @@ def eyelids(finish, material):
                 # Outer boundary is buried in the face, inner edge follows eye.
                 outer_y = -.02 - .33 * math.sqrt(max(.02, 1 - (x/.46)**2 - ((z-1.77)/.345)**2)) + .006
                 def eye_y(zlocal):
-                    return -.265 - .095 * math.sqrt(max(.015, 1 - ((x-side*.177)/.112)**2 - (zlocal/.116)**2)) - .005
-                y = eye_y(dz) * (1-r) + outer_y * r
+                    return -.265 - .095 * math.sqrt(max(.015, 1 - ((x-side*.177)/.112)**2 - (zlocal/.116)**2)) - .010
+                def surface_y(zlocal):
+                    mixed=eye_y(zlocal)*(1-r)+outer_y*r
+                    inside=((x-side*.177)/.112)**2+(zlocal/.116)**2 < 1
+                    return min(mixed,eye_y(zlocal)) if inside else mixed
+                y = surface_y(dz)
                 verts.append((x, y, z))
                 closed_dz = dz * r
-                closed.append((x, eye_y(closed_dz)*(1-r) + outer_y*r, 1.805+closed_dz))
+                closed.append((x, surface_y(closed_dz), 1.805+closed_dz))
                 sides.append(side)
         for row in range(rows-1):
             for i in range(segments):
