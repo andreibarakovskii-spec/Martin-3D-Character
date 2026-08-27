@@ -2,7 +2,6 @@
 import bpy
 import math
 import random
-import bisect
 from pathlib import Path
 from mathutils import Vector
 
@@ -48,7 +47,7 @@ def finish(obj, mat, bone):
     return obj
 
 
-def sphere(name, location, scale, mat, bone='spine', segments=40, rings=24):
+def sphere(name, location, scale, mat, bone='spine', segments=24, rings=16):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=rings, location=location)
     obj = bpy.context.object
     obj.name = name
@@ -183,7 +182,7 @@ bpy.ops.object.select_all(action='DESELECT')
 for o in facial:o.select_set(True)
 bpy.context.view_layer.objects.active=head
 bpy.ops.object.join()
-remesh=head.modifiers.new('Unified_face','REMESH');remesh.mode='VOXEL';remesh.voxel_size=.009
+remesh=head.modifiers.new('Unified_face','REMESH');remesh.mode='VOXEL';remesh.voxel_size=.015
 bpy.ops.object.modifier_apply(modifier=remesh.name)
 smooth=head.modifiers.new('Sculpt_transitions','SMOOTH');smooth.factor=1.1;smooth.iterations=6
 bpy.ops.object.modifier_apply(modifier=smooth.name)
@@ -199,42 +198,53 @@ for attr in list(head.data.color_attributes):head.data.color_attributes.remove(a
 finish(head,fur,'head');coat(head)
 bpy.context.view_layer.update()
 
-# Surface-area distributed tapered strands: same geometry in source and exported GLB.
-# Density is capped for mobile iteration; not a final fur-card groom.
-for source,bone in list(parts):
-    if not source.data.materials or source.data.materials[0]!=fur:continue
-    source.data.calc_loop_triangles()
-    tris=list(source.data.loop_triangles);cdf=[];total=0
-    for tri in tris:
-        total+=tri.area;cdf.append(total)
-    if total==0:continue
-    count=min(18000,max(150,int(total*13500)))
-    verts=[];faces=[];colors=[]
-    for unused in range(count):
-        tri=tris[min(len(tris)-1,bisect.bisect_left(cdf,random.random()*total))]
-        ids=tri.vertices;u=math.sqrt(random.random());v=random.random();weights=(1-u,u*(1-v),u*v)
-        local=sum((source.data.vertices[i].co*w for i,w in zip(ids,weights)),Vector())
-        p=source.matrix_world@local
-        n=sum((source.data.vertices[i].normal*w for i,w in zip(ids,weights)),Vector())
-        n=(source.matrix_world.to_3x3()@n).normalized()
-        tangent=n.cross(Vector((0,0,1)))
-        if tangent.length<.01:tangent=n.cross(Vector((0,1,0)))
-        tangent.normalize()
-        flow=Vector((p.x*.2,0,-1));flow-=n*flow.dot(n)
-        if flow.length:flow.normalize()
-        length=random.uniform(.009,.019);width=random.uniform(.00045,.0008)
-        mid=p+n*(length*.48)+flow*(length*.20)
-        tip=p+n*(length*.78)+flow*(length*.65)
-        k=len(verts)
-        verts.extend([p-tangent*width,p+tangent*width,mid-tangent*width*.55,mid+tangent*width*.55,tip])
-        faces.extend([(k,k+1,k+2),(k+1,k+3,k+2),(k+2,k+3,k+4)])
-        col=tuple(sum(source.data.color_attributes['Coat'].data[i].color[c]*w for i,w in zip(ids,weights)) for c in range(4))
-        colors.extend([col]*5)
-    mesh=bpy.data.meshes.new(source.name+'_fur');mesh.from_pydata(verts,[],faces)
-    obj=bpy.data.objects.new(source.name+'_fur',mesh);bpy.context.collection.objects.link(obj)
-    finish(obj,fur,bone)
-    attr=mesh.color_attributes.new(name='Coat',type='FLOAT_COLOR',domain='POINT')
-    for d,col in zip(attr.data,colors):d.color=col
+# Mobile version: no strand geometry. Consolidate parts by material and keep
+# their per-bone vertex groups before joining, reducing draw calls.
+bpy.context.view_layer.objects.active=head
+mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.55
+bpy.ops.object.modifier_apply(modifier=mod.name)
+groups={}
+for obj,bname in parts:
+    vg=obj.vertex_groups.new(name=bname)
+    vg.add(list(range(len(obj.data.vertices))),1,'REPLACE')
+    groups.setdefault(obj.data.materials[0].name,[]).append(obj)
+parts=[]
+for name,objects in groups.items():
+    bpy.ops.object.select_all(action='DESELECT')
+    for obj in objects:obj.select_set(True)
+    bpy.context.view_layer.objects.active=objects[0]
+    bpy.ops.object.join()
+    obj=bpy.context.object;obj.name='Mobile_'+name
+    parts.append((obj,None))
+    if obj.data.materials[0]==fur:coat_mesh=obj
+
+# Bake the tabby coloration into one 1024px atlas. It travels inside the GLB.
+bpy.ops.object.select_all(action='DESELECT');coat_mesh.select_set(True)
+bpy.context.view_layer.objects.active=coat_mesh
+bpy.ops.object.mode_set(mode='EDIT');bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.uv.smart_project(island_margin=.025)
+bpy.ops.object.mode_set(mode='OBJECT')
+image=bpy.data.images.new('Martin_coat_1024',width=1024,height=1024,alpha=False)
+nodes=fur.node_tree.nodes;links=fur.node_tree.links
+tex=nodes.new('ShaderNodeTexImage');tex.image=image;nodes.active=tex
+emission=nodes.new('ShaderNodeEmission')
+links.new(v.outputs['Color'],emission.inputs['Color'])
+output=nodes.get('Material Output');links.new(emission.outputs[0],output.inputs['Surface'])
+scene=bpy.context.scene;scene.render.engine='CYCLES';scene.cycles.samples=1
+scene.cycles.use_denoising=False;scene.render.bake.margin=12
+bpy.ops.object.bake(type='EMIT')
+# Tiny baked grain; no extra geometry or runtime procedural shader.
+import numpy as np
+pixels=np.array(image.pixels[:],dtype=np.float32).reshape(-1,4)
+rng=np.random.default_rng(27)
+pixels[:,:3]*=rng.uniform(.985,1.015,(len(pixels),1))
+image.pixels.foreach_set(pixels.ravel());image.update()
+image.filepath_raw=str(OUT/'martin-coat-1024.png');image.file_format='PNG';image.save();image.pack()
+principled=nodes.get('Principled BSDF')
+links.new(tex.outputs['Color'],principled.inputs['Base Color'])
+links.new(principled.outputs[0],output.inputs['Surface'])
+nodes.remove(emission);nodes.remove(v)
+for attr in list(coat_mesh.data.color_attributes):coat_mesh.data.color_attributes.remove(attr)
 
 # Armature with deliberately simple rigid prototype skin weights.
 bpy.ops.object.select_all(action='DESELECT')
@@ -255,7 +265,8 @@ for s,side in [(1,'L'),(-1,'R')]:
     bone('leg.'+side,(s*.19,0,.65),(s*.19,0,.10),'root')
 bpy.ops.object.mode_set(mode='OBJECT')
 for obj,bname in parts:
-    group=obj.vertex_groups.new(name=bname);group.add(list(range(len(obj.data.vertices))),1,'REPLACE')
+    if bname is not None:
+        group=obj.vertex_groups.new(name=bname);group.add(list(range(len(obj.data.vertices))),1,'REPLACE')
     mod=obj.modifiers.new('Skin','ARMATURE');mod.object=rig
     obj.parent=rig
 rig.animation_data_create()
@@ -284,7 +295,7 @@ for name,end in [('Idle',120),('Talk',60),('Wave',90),('DJ',120)]:
 rig.animation_data.action=None
 for p in rig.pose.bones:p.rotation_euler=(0,0,0)
 scene=bpy.context.scene;scene.render.fps=30;scene.frame_start=1;scene.frame_end=120;scene.frame_set(1)
-rig['status']='PROTOTYPE: not 1:1; rigid skin; no phoneme morphs; Android untested'
+rig['status']='MOBILE PROTOTYPE: baked 1024 atlas, no strand geometry; rigid skin; Android untested'
 # Export only character, excluding studio. Unmute NLA so exporter sees all tracks.
 bpy.ops.object.select_all(action='DESELECT');rig.select_set(True)
 for obj,_ in parts:obj.select_set(True)

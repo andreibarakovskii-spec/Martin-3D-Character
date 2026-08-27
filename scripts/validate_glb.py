@@ -34,7 +34,11 @@ def validate(path):
         for s in a['samplers']:
             acc=doc['accessors'][s['input']]
             assert acc['max'][0]>acc['min'][0]
-    assert any('COLOR_0' in p['attributes'] for m in doc['meshes'] for p in m['primitives'])
+    assert doc.get('images') and doc.get('textures'), 'Missing baked coat atlas'
+    assert any('TEXCOORD_0' in p['attributes'] for m in doc['meshes'] for p in m['primitives'])
+    assert triangles<=40000, f'Mobile triangle budget exceeded: {triangles}'
+    assert len(doc['meshes'])<=16, 'Too many separate meshes'
+    assert len(raw)<=8*1024*1024, 'GLB size budget exceeded'
     report={'status':'structural_checks_passed','bytes':len(raw),'triangles':triangles,
             'meshes':len(doc['meshes']),'skins':len(doc['skins']),'animations':sorted(names),
             'visual_likeness':'NOT VALIDATED','android_device':'NOT TESTED'}
