@@ -23,7 +23,7 @@ def material(name, color, roughness=.65, metallic=0):
     return m
 
 
-fur = material('Coat_vertex_color', (.23, .20, .17))
+fur = material('Coat_vertex_color', (.08, .075, .065))
 v = fur.node_tree.nodes.new('ShaderNodeVertexColor')
 v.layer_name = 'Coat'
 fur.node_tree.links.new(v.outputs['Color'], fur.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
@@ -62,6 +62,7 @@ def tube(name, points, radius, mat, bone='spine'):
     curve.resolution_u = 6
     curve.bevel_depth = radius
     curve.bevel_resolution = 2
+    curve.use_fill_caps = True
     spline = curve.splines.new('BEZIER')
     spline.bezier_points.add(len(points)-1)
     for p, co in zip(spline.bezier_points, points):
@@ -84,8 +85,8 @@ def coat(obj, light=False):
         stripe = max(0, math.cos(z*24 + 2*math.sin(x*10) + y*7))**8
         if z > 1.6:
             stripe = max(0, math.cos(x*31 + 2*math.sin(z*9) + y*6))**10
-        base = .43 if light else .245
-        tone = base - (.035 if light else .10)*stripe + random.uniform(-.02,.02)
+        base = .20 if light else .075
+        tone = base - (.025 if light else .046)*stripe + random.uniform(-.004,.004)
         attr.data[i].color = (tone, tone*.90, tone*.78, 1)
 
 
@@ -132,9 +133,9 @@ for s in [-1,1]:
     mod=obj.modifiers.new('Soft_ear','BEVEL'); mod.width=.045; mod.segments=3
     bpy.ops.object.modifier_apply(modifier=mod.name)
     finish(obj,fur,'head'); coat(obj)
-    patch=sphere('Ear_inner',(s*.315,-.047,2.10),(.060,.025,.103),inner,'head')
+    patch=sphere('Ear_inner',(s*.315,-.047,2.10),(.046,.012,.085),inner,'head')
     patch.rotation_euler.y=s*.23
-    sphere('Eye_socket',(s*.177,-.291,1.815),(.132,.066,.147),nosemat,'head')
+    sphere('Eye_socket',(s*.177,-.291,1.815),(.125,.047,.138),shoe,'head')
     sphere('Eye_iris',(s*.177,-.343,1.815),(.108,.035,.122),iris,'head')
     sphere('Pupil',(s*.177,-.374,1.827),(.076,.022,.094),eye,'head')
     # Highlights come from actual scene lights, not white painted spots.
@@ -147,6 +148,7 @@ tube('Smile',[(-.098,-.381,1.558),(0,-.402,1.54),(.098,-.381,1.558)],.006,nosema
 
 tail=tube('Tail',[(0,.20,.63),(.19,.36,.45),(.45,.34,.48),(.62,.25,.70),(.62,.15,.86)],.068,fur,'tail')
 coat(tail)
+tip=sphere('Tail_tip',(.62,.15,.86),(.068,.068,.068),fur,'tail',24,16);coat(tip)
 # Headphones around collar, each cup is modeled with separate padded and metal parts.
 for s in [-1,1]:
     sphere('Headphone_pad',(s*.28,-.18,1.40),(.096,.083,.145),shoe)
