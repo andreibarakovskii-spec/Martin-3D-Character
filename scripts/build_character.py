@@ -47,7 +47,7 @@ def finish(obj, mat, bone):
     return obj
 
 
-def sphere(name, location, scale, mat, bone='spine', segments=24, rings=16):
+def sphere(name, location, scale, mat, bone='spine', segments=20, rings=12):
     bpy.ops.mesh.primitive_uv_sphere_add(segments=segments, ring_count=rings, location=location)
     obj = bpy.context.object
     obj.name = name
@@ -201,7 +201,7 @@ bpy.context.view_layer.update()
 # Mobile version: no strand geometry. Consolidate parts by material and keep
 # their per-bone vertex groups before joining, reducing draw calls.
 bpy.context.view_layer.objects.active=head
-mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.55
+mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.40
 bpy.ops.object.modifier_apply(modifier=mod.name)
 groups={}
 for obj,bname in parts:
