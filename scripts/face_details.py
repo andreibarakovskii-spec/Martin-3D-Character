@@ -38,6 +38,8 @@ def eyelids(finish, material):
     mesh.from_pydata(verts, [], faces); mesh.update()
     obj=bpy.data.objects.new('Eyelids',mesh); bpy.context.collection.objects.link(obj)
     finish(obj,material,'head')
+    protected=obj.vertex_groups.new(name='LidSurface')
+    protected.add(list(range(len(verts))),1,'REPLACE')
     obj.shape_key_add(name='Basis')
     for side,label in [(-1,'R'),(1,'L')]:
         key=obj.shape_key_add(name='Blink.'+label)
@@ -82,9 +84,32 @@ def smile_morph(obj):
     key=obj.shape_key_add(name='Smile')
     # Local-to-world selection avoids touching paws and tail in the coat atlas mesh.
     inverse=obj.matrix_world.inverted()
+    protected=obj.vertex_groups.get('LidSurface')
     for vert,point in zip(obj.data.vertices,key.data):
+        if protected and any(g.group==protected.index and g.weight>0 for g in vert.groups):
+            continue
         co=obj.matrix_world@vert.co
         if co.y < -.25 and 1.50 < co.z < 1.73:
             weight=math.exp(-((abs(co.x)-.14)/.105)**2-((co.z-1.60)/.10)**2)
             co.z+=.026*weight; co.x+=math.copysign(.009*weight,co.x)
             point.co=inverse@co
+
+
+def iris_texture(material, out):
+    """An original radial iris map, without a raised pupil mesh."""
+    import numpy as np
+    n=512
+    y,x=np.mgrid[0:n,0:n];x=(x+.5)/n*2-1;y=(y+.5)/n*2-1
+    r=np.sqrt(x*x+y*y);a=np.arctan2(y,x)
+    pupil=np.clip((r-.49)/.015,0,1)
+    streak=.82+.10*np.sin(a*97+r*18)+.08*np.sin(a*151-r*25)
+    ring=1-.55*np.clip((r-.91)/.07,0,1)
+    rgba=np.ones((n,n,4),dtype=np.float32)
+    for channel,base in enumerate((.66,.59,.27)):
+        rgba[:,:,channel]=.025*(1-pupil)+base*pupil*streak*ring
+    image=bpy.data.images.new('Martin_iris_512',width=n,height=n,alpha=False)
+    image.pixels.foreach_set(rgba.ravel())
+    image.filepath_raw=str(out/'martin-iris.png');image.file_format='PNG';image.save();image.pack()
+    nodes,links=material.node_tree.nodes,material.node_tree.links
+    tex=nodes.new('ShaderNodeTexImage');tex.image=image
+    links.new(tex.outputs['Color'],nodes.get('Principled BSDF').inputs['Base Color'])

@@ -6,7 +6,7 @@ from pathlib import Path
 from mathutils import Vector
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from face_details import eyelids, cloth_normal, smile_morph
+from face_details import eyelids, cloth_normal, smile_morph, iris_texture
 
 OUT = Path(__file__).resolve().parents[1] / 'build'
 OUT.mkdir(exist_ok=True)
@@ -41,9 +41,7 @@ inner = material('Inner_ear', (.22, .145, .12), .9)
 whisker = material('Whiskers', (.55, .53, .47), .65)
 lidmat = fur
 eye_surface = material('Eye_surface', (1,1,1), .20)
-eye_color = eye_surface.node_tree.nodes.new('ShaderNodeVertexColor')
-eye_color.layer_name='EyeColor'
-eye_surface.node_tree.links.new(eye_color.outputs['Color'],eye_surface.node_tree.nodes.get('Principled BSDF').inputs['Base Color'])
+iris_texture(eye_surface, OUT)
 cloth_normal([black, shoe], OUT)
 
 
@@ -155,14 +153,10 @@ for s in [-1,1]:
     mesh.from_pydata([(s*.245,-.056,2.025),(s*.369,-.034,2.025),(s*.345,-.032,2.215)],[],[(0,1,2)] if s>0 else [(2,1,0)])
     patch=bpy.data.objects.new('Ear_inner',mesh);bpy.context.collection.objects.link(patch)
     finish(patch,inner,'head')
-    globe=sphere('Eye_globe',(s*.177,-.265,1.805),(.108,.095,.113),eye_surface,'head',48,32)
-    color=globe.data.color_attributes.new(name='EyeColor',type='FLOAT_COLOR',domain='POINT')
-    for vertex,entry in zip(globe.data.vertices,color.data):
-        x,y,z=vertex.co
-        radial=math.hypot(x/.108,z/.113)
-        pupil=max(0,min(1,(radial-.48)/.09)) if y<0 else 1
-        streak=.86+.14*math.cos(math.atan2(z,x)*37)
-        entry.color=(.006*(1-pupil)+.40*streak*pupil,.008*(1-pupil)+.34*streak*pupil,.006*(1-pupil)+.095*streak*pupil,1)
+    globe=sphere('Eye_globe',(s*.177,-.265,1.805),(.108,.095,.113),eye_surface,'head',32,24)
+    for loop in globe.data.loops:
+        co=globe.data.vertices[loop.vertex_index].co
+        globe.data.uv_layers.active.data[loop.index].uv=(.5+co.x/.216,.5+co.z/.226)
     # Highlights come from actual scene lights, not white painted spots.
     for j in range(4):
         tube('Whisker',[(s*.13,-.391,1.60+j*.018),(s*.32,-.41,1.60+j*.035),(s*(.52+j*.022),-.37,1.57+j*.053)],.0023,whisker,'head')
