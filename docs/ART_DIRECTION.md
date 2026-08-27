@@ -1,26 +1,32 @@
-# Martin: target and acceptance criteria
+# Martin — mobile cartoon direction
 
-Status: first procedural 3D prototype, NOT a finished 1:1 reconstruction.
+Updated after user clarification: a lightweight cartoon character with textures
+similar in complexity to Talking Tom is sufficient. Do not target film-quality fur.
+Preserve Martin's identity, outfit and real-cat gray tabby coat; do not copy Tom's identity.
 
-Keep the first reference's large rounded head, short upright body,
-black MARTIN hoodie, black/white sneakers, gold/black headphones,
-microphone and friendly expression. The real cat only guides coloration:
-gray/taupe tabby coat, dark forehead/cheek stripes, lighter muzzle,
-brown-pink nose, yellow/olive irises.
+## Current implementation
 
-Private source photographs are not committed to this public repository.
-The AI-generated reference artwork is NOT proof of a working 3D model.
+- Unified face surface with recessed spherical eyes.
+- No individual hair geometry, particles or fur simulation.
+- One baked 1024×1024 coat atlas embedded in GLB.
+- Parts consolidated by material, retaining bone vertex groups.
+- Hard build caps: 40,000 triangles, 16 meshes, 8 MiB GLB.
+- Four skeletal clips: Idle, Talk, Wave, DJ.
 
-## Required before calling this finished
+## Still required before production readiness
 
-- Match front/side/three-quarter silhouettes to the approved reference.
-- Sculpt a coherent face, eyelids, mouth cavity and ears.
-- Replace prototype rigid part weights with smooth deformation weights.
-- Add proper eyelid blinking and phoneme morph targets for speech.
-- Refine UVs, baked coat textures, groomed fur cards and their transparency.
-- Compare a real exported-GLB render with the Blender source render.
-- Test animation blending, memory, frame times and loading on the target Android phone.
-- Verify asset and dependency licenses. No paid APIs or paid assets in this prototype.
+- Visual review of silhouette, eye placement, ears, clothing and coat.
+- Smooth deformation weights instead of rigid prototype part weighting.
+- Eyelid blinking and phoneme/mouth shape animation.
+- Android integration and device measurement of frame time, memory and loading.
+- Low-cost scene lighting and shadows selected in the Android renderer.
 
-The current build is deliberately labeled prototype in filenames and metadata.
-Do not present a generated illustration as a render of the mesh, or a green build as proof of visual likeness.
+Build caps are engineering targets, NOT guaranteed FPS. Offline Cycles render times do not measure phone real-time performance.
+Only real source/exported-model renders count as visual evidence.
+Private reference photographs are not committed to this public repository.
+
+## Verified build 33046323733
+
+GLB: 2,212,088 bytes; 34,906 triangles; 10 meshes; one skin; four clips.
+Baked atlas and reimport rendering passed. Eyes remain overly prominent.
+Visual design and Android integration are not finished.
