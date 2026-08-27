@@ -1,0 +1,28 @@
+name: Build and validate Martin prototype
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender from Ubuntu packages
+        run: sudo apt-get update && sudo apt-get install -y blender
+      - name: Build actual mesh, rig, animations and render
+        run: blender --background --factory-startup --python-exit-code 1 --python scripts/build_character.py
+      - name: Check GLB contents
+        run: python3 scripts/validate_glb.py build/martin-prototype.glb
+      - name: Reimport exported GLB and render
+        run: blender --background --factory-startup --python-exit-code 1 --python scripts/verify_export.py
+      - name: Upload model and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: martin-3d-prototype
+          path: build/
+          if-no-files-found: error
+          retention-days: 30
