@@ -2,6 +2,7 @@
 import bpy
 import math
 import random
+import bisect
 from pathlib import Path
 from mathutils import Vector
 
@@ -85,7 +86,8 @@ def coat(obj, light=False):
         stripe = max(0, math.cos(z*24 + 2*math.sin(x*10) + y*7))**8
         if z > 1.6:
             stripe = max(0, math.cos(x*31 + 2*math.sin(z*9) + y*6))**10
-        base = .20 if light else .075
+        muzzle_mask = max(0.0, 1.0-abs(x)/.24)*max(0.0,1.0-abs(z-1.59)/.13) if y < -.30 else 0
+        base = .16 if light else .075+.085*muzzle_mask
         tone = base - (.025 if light else .046)*stripe + random.uniform(-.004,.004)
         attr.data[i].color = (tone, tone*.90, tone*.78, 1)
 
@@ -95,7 +97,14 @@ body = sphere('Hoodie_body', (0,0,.98), (.39,.255,.46), black)
 sphere('Hoodie_hem', (0,-.002,.62), (.39,.255,.085), black)
 # The collar and fabric volumes are explicit mesh, not a backdrop.
 sphere('Hood_fold_back', (0,.16,1.39), (.34,.16,.18), black)
-sphere('Pocket', (0,-.241,.87), (.265,.038,.16), black)
+mesh=bpy.data.meshes.new('Pocket_panel')
+mesh.from_pydata([(-.25,-.233,.75),(.25,-.233,.75),(.25,-.26,.88),(.14,-.269,.97),(-.14,-.269,.97),(-.25,-.26,.88)],[],[(0,1,2,3,4,5)])
+obj=bpy.data.objects.new('Pocket',mesh);bpy.context.collection.objects.link(obj)
+finish(obj,black,'spine')
+mod=obj.modifiers.new('Fabric_thickness','SOLIDIFY');mod.thickness=.012
+bpy.context.view_layer.objects.active=obj;bpy.ops.object.modifier_apply(modifier=mod.name)
+tube('Pocket_stitch',[(-.245,-.25,.755),(0,-.266,.752),(.245,-.25,.755)],.003,shoe)
+
 for s in [-1,1]:
     side = 'L' if s > 0 else 'R'
     leg = sphere('Leg_'+side, (s*.19,0,.40), (.155,.155,.32), fur, 'leg.'+side)
@@ -116,12 +125,12 @@ for s in [-1,1]:
         coat(toe)
     tube('Drawstring_'+side, [(s*.10,-.235,1.43),(s*.105,-.29,1.25),(s*.12,-.30,1.16)], .012, black)
 
-head = sphere('Head', (0,-.02,1.77), (.44,.32,.38), fur, 'head', 64,40)
+head = sphere('Head', (0,-.02,1.77), (.46,.33,.345), fur, 'head', 64,40)
 coat(head)
 for s in [-1,1]:
-    cheek = sphere('Cheek', (s*.215,-.195,1.64), (.22,.16,.18), fur,'head')
+    cheek = sphere('Cheek', (s*.215,-.195,1.64), (.22,.15,.15), fur,'head')
     coat(cheek)
-    muzzle = sphere('Muzzle', (s*.095,-.326,1.60), (.14,.09,.088),fur,'head')
+    muzzle = sphere('Muzzle', (s*.095,-.326,1.60), (.13,.08,.075),fur,'head')
     coat(muzzle,True)
     # Rounded triangular ear with thickness, subdivided before export.
     verts=[(s*.19,-.05,1.99),(s*.40,-.02,1.98),(s*.35,-.015,2.28),(s*.19,.075,1.99),(s*.40,.08,1.98),(s*.35,.06,2.28)]
@@ -135,9 +144,9 @@ for s in [-1,1]:
     finish(obj,fur,'head'); coat(obj)
     patch=sphere('Ear_inner',(s*.315,-.047,2.10),(.046,.012,.085),inner,'head')
     patch.rotation_euler.y=s*.23
-    sphere('Eye_socket',(s*.177,-.291,1.815),(.125,.047,.138),shoe,'head')
-    sphere('Eye_iris',(s*.177,-.343,1.815),(.108,.035,.122),iris,'head')
-    sphere('Pupil',(s*.177,-.374,1.827),(.076,.022,.094),eye,'head')
+    sphere('Eye_globe',(s*.177,-.302,1.805),(.111,.105,.114),eye,'head')
+    sphere('Eye_iris',(s*.177,-.402,1.805),(.086,.018,.088),iris,'head')
+    sphere('Pupil',(s*.177,-.419,1.809),(.063,.013,.068),eye,'head')
     # Highlights come from actual scene lights, not white painted spots.
     for j in range(4):
         tube('Whisker',[(s*.13,-.391,1.60+j*.018),(s*.32,-.41,1.60+j*.035),(s*(.52+j*.022),-.37,1.57+j*.053)],.0023,whisker,'head')
@@ -167,23 +176,62 @@ text_mesh('MARTIN',(0,-.277,.99),.072)
 tube('Microphone_handle',[(-.46,-.22,.71),(-.46,-.22,1.03)],.029,shoe,'arm.R')
 sphere('Microphone_grille',(-.46,-.22,1.07),(.064,.064,.087),shoe,'arm.R')
 
-# Coat surface detail: sparse short tapered mesh hairs. Same geometry exports to GLB.
-# This is prototype fuzz, not final groomed fur cards.
+# Continuous facial surface: weld overlapping masses, smooth, and cut eye sockets.
+facial=[o for o,b in parts if o.name=='Head' or o.name.startswith(('Cheek','Muzzle'))]
+parts[:]=[(o,b) for o,b in parts if o not in facial]
+bpy.ops.object.select_all(action='DESELECT')
+for o in facial:o.select_set(True)
+bpy.context.view_layer.objects.active=head
+bpy.ops.object.join()
+remesh=head.modifiers.new('Unified_face','REMESH');remesh.mode='VOXEL';remesh.voxel_size=.009
+bpy.ops.object.modifier_apply(modifier=remesh.name)
+smooth=head.modifiers.new('Sculpt_transitions','SMOOTH');smooth.factor=1.1;smooth.iterations=6
+bpy.ops.object.modifier_apply(modifier=smooth.name)
+for side in [-1,1]:
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=40,ring_count=24,location=(side*.177,-.302,1.805))
+    cutter=bpy.context.object;cutter.scale=(.118,.114,.123)
+    bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
+    bpy.context.view_layer.objects.active=head
+    mod=head.modifiers.new('Recessed_eye','BOOLEAN');mod.operation='DIFFERENCE';mod.object=cutter
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    bpy.data.objects.remove(cutter,do_unlink=True)
+for attr in list(head.data.color_attributes):head.data.color_attributes.remove(attr)
+finish(head,fur,'head');coat(head)
+bpy.context.view_layer.update()
+
+# Surface-area distributed tapered strands: same geometry in source and exported GLB.
+# Density is capped for mobile iteration; not a final fur-card groom.
 for source,bone in list(parts):
-    if not source.data.materials or source.data.materials[0]!=fur: continue
-    vertices=[];faces=[];colors=[]
-    for i in range(0,len(source.data.vertices),3):
-        vtx=source.data.vertices[i]
-        p=source.matrix_world@vtx.co
-        n=(source.matrix_world.to_3x3()@vtx.normal).normalized()
+    if not source.data.materials or source.data.materials[0]!=fur:continue
+    source.data.calc_loop_triangles()
+    tris=list(source.data.loop_triangles);cdf=[];total=0
+    for tri in tris:
+        total+=tri.area;cdf.append(total)
+    if total==0:continue
+    count=min(18000,max(150,int(total*13500)))
+    verts=[];faces=[];colors=[]
+    for unused in range(count):
+        tri=tris[min(len(tris)-1,bisect.bisect_left(cdf,random.random()*total))]
+        ids=tri.vertices;u=math.sqrt(random.random());v=random.random();weights=(1-u,u*(1-v),u*v)
+        local=sum((source.data.vertices[i].co*w for i,w in zip(ids,weights)),Vector())
+        p=source.matrix_world@local
+        n=sum((source.data.vertices[i].normal*w for i,w in zip(ids,weights)),Vector())
+        n=(source.matrix_world.to_3x3()@n).normalized()
         tangent=n.cross(Vector((0,0,1)))
         if tangent.length<.01:tangent=n.cross(Vector((0,1,0)))
-        tangent.normalize(); width=.0014; length=random.uniform(.006,.014)
-        k=len(vertices);vertices.extend([p-tangent*width,p+tangent*width,p+n*length+Vector((0,0,-.003))]);faces.append((k,k+1,k+2))
-        col=source.data.color_attributes['Coat'].data[i].color[:]
-        colors.extend([col,col,col])
-    mesh=bpy.data.meshes.new(source.name+'_fuzz');mesh.from_pydata(vertices,[],faces)
-    obj=bpy.data.objects.new(source.name+'_fuzz',mesh);bpy.context.collection.objects.link(obj)
+        tangent.normalize()
+        flow=Vector((p.x*.2,0,-1));flow-=n*flow.dot(n)
+        if flow.length:flow.normalize()
+        length=random.uniform(.009,.019);width=random.uniform(.00045,.0008)
+        mid=p+n*(length*.48)+flow*(length*.20)
+        tip=p+n*(length*.78)+flow*(length*.65)
+        k=len(verts)
+        verts.extend([p-tangent*width,p+tangent*width,mid-tangent*width*.55,mid+tangent*width*.55,tip])
+        faces.extend([(k,k+1,k+2),(k+1,k+3,k+2),(k+2,k+3,k+4)])
+        col=tuple(sum(source.data.color_attributes['Coat'].data[i].color[c]*w for i,w in zip(ids,weights)) for c in range(4))
+        colors.extend([col]*5)
+    mesh=bpy.data.meshes.new(source.name+'_fur');mesh.from_pydata(verts,[],faces)
+    obj=bpy.data.objects.new(source.name+'_fur',mesh);bpy.context.collection.objects.link(obj)
     finish(obj,fur,bone)
     attr=mesh.color_attributes.new(name='Coat',type='FLOAT_COLOR',domain='POINT')
     for d,col in zip(attr.data,colors):d.color=col
