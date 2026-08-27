@@ -21,14 +21,25 @@ def validate(path):
     for v in doc['bufferViews']:
         assert v.get('byteOffset',0)+v['byteLength']<=len(binary)
     names={a.get('name') for a in doc.get('animations',[])}
-    assert {'Idle','Talk','Wave','DJ'}<=names, f'Missing animations: {names}'
+    assert {'Idle','Talk','Wave','DJ','Blink'}<=names, f'Missing animations: {names}'
+    morphs=set()
     triangles=0
     for mesh in doc['meshes']:
+        target_names=mesh.get('extras',{}).get('targetNames',[])
+        morphs.update(target_names)
         for p in mesh['primitives']:
             assert p.get('mode',4)==4
             assert 'POSITION' in p['attributes']
             assert 'JOINTS_0' in p['attributes'] and 'WEIGHTS_0' in p['attributes']
             triangles+=doc['accessors'][p['indices']]['count']//3
+            if target_names:
+                assert len(p.get('targets',[]))==len(target_names)
+                for target in p['targets']:
+                    acc=doc['accessors'][target['POSITION']]
+                    assert acc['count']==doc['accessors'][p['attributes']['POSITION']]['count']
+    assert {'Blink.L','Blink.R','Smile'}<=morphs, f'Missing facial targets: {morphs}'
+    assert any(c['target']['path']=='weights' for a in doc['animations'] for c in a['channels']), 'No morph animation exported'
+    assert any('normalTexture' in m for m in doc['materials']), 'Missing fabric normal map'
     for a in doc['animations']:
         assert a['channels'] and a['samplers']
         for s in a['samplers']:
@@ -41,6 +52,7 @@ def validate(path):
     assert len(raw)<=8*1024*1024, 'GLB size budget exceeded'
     report={'status':'structural_checks_passed','bytes':len(raw),'triangles':triangles,
             'meshes':len(doc['meshes']),'skins':len(doc['skins']),'animations':sorted(names),
+            'morph_targets':sorted(morphs),
             'visual_likeness':'NOT VALIDATED','android_device':'NOT TESTED'}
     Path(path).with_suffix('.report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))

@@ -4,6 +4,9 @@ import math
 import random
 from pathlib import Path
 from mathutils import Vector
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from face_details import eyelids, cloth_normal, smile_morph
 
 OUT = Path(__file__).resolve().parents[1] / 'build'
 OUT.mkdir(exist_ok=True)
@@ -36,6 +39,8 @@ iris = material('Iris_olive_gold', (.4, .37, .1), .25)
 nosemat = material('Nose_rose_brown', (.24, .10, .075), .5)
 inner = material('Inner_ear', (.22, .145, .12), .9)
 whisker = material('Whiskers', (.55, .53, .47), .65)
+lidmat = material('Eyelid_coat', (.076, .070, .061), .92)
+cloth_normal([black, shoe], OUT)
 
 
 def finish(obj, mat, bone):
@@ -141,15 +146,22 @@ for s in [-1,1]:
     mod=obj.modifiers.new('Soft_ear','BEVEL'); mod.width=.045; mod.segments=3
     bpy.ops.object.modifier_apply(modifier=mod.name)
     finish(obj,fur,'head'); coat(obj)
-    patch=sphere('Ear_inner',(s*.315,-.047,2.10),(.046,.012,.085),inner,'head')
-    patch.rotation_euler.y=s*.23
-    sphere('Eye_globe',(s*.177,-.302,1.805),(.111,.105,.114),eye,'head')
-    sphere('Eye_iris',(s*.177,-.402,1.805),(.086,.018,.088),iris,'head')
-    sphere('Pupil',(s*.177,-.419,1.809),(.063,.013,.068),eye,'head')
+    # Inset triangular ear, replacing the oval insert.
+    mesh=bpy.data.meshes.new('Ear_inner_triangle')
+    mesh.from_pydata([(s*.245,-.056,2.025),(s*.369,-.034,2.025),(s*.345,-.032,2.215)],[],[(0,1,2)] if s>0 else [(2,1,0)])
+    patch=bpy.data.objects.new('Ear_inner',mesh);bpy.context.collection.objects.link(patch)
+    finish(patch,inner,'head')
+    sphere('Eye_globe',(s*.177,-.265,1.805),(.108,.095,.113),iris,'head',32,20)
+    sphere('Pupil',(s*.177,-.355,1.805),(.055,.011,.062),eye,'head',32,20)
     # Highlights come from actual scene lights, not white painted spots.
     for j in range(4):
         tube('Whisker',[(s*.13,-.391,1.60+j*.018),(s*.32,-.41,1.60+j*.035),(s*(.52+j*.022),-.37,1.57+j*.053)],.0023,whisker,'head')
-sphere('Nose',(0,-.423,1.656),(.059,.035,.035),nosemat,'head')
+mesh=bpy.data.meshes.new('Triangular_nose')
+mesh.from_pydata([(-.052,-.422,1.681),(.052,-.422,1.681),(0,-.446,1.627),(0,-.399,1.660)],[],[(2,1,0),(0,1,3),(1,2,3),(2,0,3)])
+obj=bpy.data.objects.new('Nose',mesh);bpy.context.collection.objects.link(obj)
+bpy.context.view_layer.objects.active=obj
+mod=obj.modifiers.new('Soft_nose_edges','BEVEL');mod.width=.010;mod.segments=3
+bpy.ops.object.modifier_apply(modifier=mod.name);finish(obj,nosemat,'head')
 tube('Philtrum',[(0,-.421,1.63),(0,-.422,1.586)],.006,nosemat,'head')
 chin=sphere('Jaw',(0,-.305,1.51),(.13,.07,.055),fur,'jaw');coat(chin,True)
 tube('Smile',[(-.098,-.381,1.558),(0,-.402,1.54),(.098,-.381,1.558)],.006,nosemat,'jaw')
@@ -187,8 +199,8 @@ bpy.ops.object.modifier_apply(modifier=remesh.name)
 smooth=head.modifiers.new('Sculpt_transitions','SMOOTH');smooth.factor=1.1;smooth.iterations=6
 bpy.ops.object.modifier_apply(modifier=smooth.name)
 for side in [-1,1]:
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=40,ring_count=24,location=(side*.177,-.302,1.805))
-    cutter=bpy.context.object;cutter.scale=(.118,.114,.123)
+    bpy.ops.mesh.primitive_uv_sphere_add(segments=40,ring_count=24,location=(side*.177,-.265,1.805))
+    cutter=bpy.context.object;cutter.scale=(.113,.103,.116)
     bpy.ops.object.transform_apply(location=False,rotation=False,scale=True)
     bpy.context.view_layer.objects.active=head
     mod=head.modifiers.new('Recessed_eye','BOOLEAN');mod.operation='DIFFERENCE';mod.object=cutter
@@ -201,14 +213,15 @@ bpy.context.view_layer.update()
 # Mobile version: no strand geometry. Consolidate parts by material and keep
 # their per-bone vertex groups before joining, reducing draw calls.
 bpy.context.view_layer.objects.active=head
-mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.40
+mod=head.modifiers.new('Mobile_face_budget','DECIMATE');mod.ratio=.35
 bpy.ops.object.modifier_apply(modifier=mod.name)
+lids=eyelids(finish,lidmat)
 groups={}
 for obj,bname in parts:
     vg=obj.vertex_groups.new(name=bname)
     vg.add(list(range(len(obj.data.vertices))),1,'REPLACE')
-    groups.setdefault(obj.data.materials[0].name,[]).append(obj)
-parts=[]
+    if obj != lids:groups.setdefault(obj.data.materials[0].name,[]).append(obj)
+parts=[(lids,None)]
 for name,objects in groups.items():
     bpy.ops.object.select_all(action='DESELECT')
     for obj in objects:obj.select_set(True)
@@ -217,6 +230,15 @@ for name,objects in groups.items():
     obj=bpy.context.object;obj.name='Mobile_'+name
     parts.append((obj,None))
     if obj.data.materials[0]==fur:coat_mesh=obj
+
+# Supply UVs to shared fabric normal maps, with a tiled weave.
+for obj,_ in parts:
+    if obj.data.materials[0] in [black,shoe]:
+        bpy.ops.object.select_all(action='DESELECT');obj.select_set(True)
+        bpy.context.view_layer.objects.active=obj
+        bpy.ops.object.mode_set(mode='EDIT');bpy.ops.mesh.select_all(action='SELECT')
+        bpy.ops.uv.smart_project(island_margin=.02);bpy.ops.object.mode_set(mode='OBJECT')
+        for uv in obj.data.uv_layers.active.data:uv.uv*=6
 
 # Bake the tabby coloration into one 1024px atlas. It travels inside the GLB.
 bpy.ops.object.select_all(action='DESELECT');coat_mesh.select_set(True)
@@ -245,6 +267,8 @@ links.new(tex.outputs['Color'],principled.inputs['Base Color'])
 links.new(principled.outputs[0],output.inputs['Surface'])
 nodes.remove(emission);nodes.remove(v)
 for attr in list(coat_mesh.data.color_attributes):coat_mesh.data.color_attributes.remove(attr)
+
+smile_morph(coat_mesh)
 
 # Armature with deliberately simple rigid prototype skin weights.
 bpy.ops.object.select_all(action='DESELECT')
@@ -300,8 +324,11 @@ rig['status']='MOBILE PROTOTYPE: baked 1024 atlas, no strand geometry; rigid ski
 bpy.ops.object.select_all(action='DESELECT');rig.select_set(True)
 for obj,_ in parts:obj.select_set(True)
 for t in rig.animation_data.nla_tracks:t.mute=False
+for t in lids.data.shape_keys.animation_data.nla_tracks:t.mute=False
 bpy.ops.export_scene.gltf(filepath=str(OUT/'martin-prototype.glb'),export_format='GLB',use_selection=True,export_animations=True,export_nla_strips=True,export_extras=True)
 for t in rig.animation_data.nla_tracks:t.mute=True
+for t in lids.data.shape_keys.animation_data.nla_tracks:t.mute=True
+for key in list(lids.data.shape_keys.key_blocks)[1:]:key.value=0
 for p in rig.pose.bones:p.rotation_euler=(0,0,0)
 scene.frame_set(1)
 # Studio rendering is explicitly of generated geometry.
@@ -314,7 +341,7 @@ def area(name,loc,power,color,size):
 area('Key',(-3,-4,5),450,(1,.86,.70),3)
 area('Fill',(3,-2,3),240,(.65,.78,1),2.5)
 area('Rim',(1,3,4),550,(1,.70,.36),2)
-bpy.ops.object.camera_add(location=(3,-7,2.9))
+bpy.ops.object.camera_add(location=(1.8,-7,2.65))
 cam=bpy.context.object;cam.rotation_euler=(Vector((0,0,1.1))-cam.location).to_track_quat('-Z','Y').to_euler();cam.data.type='ORTHO';cam.data.ortho_scale=2.85;scene.camera=cam
 scene.render.engine='CYCLES';scene.cycles.samples=96;scene.cycles.use_denoising=False
 scene.render.resolution_x=800;scene.render.resolution_y=1000;scene.render.resolution_percentage=100
